@@ -16,11 +16,21 @@ async function typing(token, chatId) { await tg("sendChatAction", token, { chat_
 async function sendText(token, chatId, text) { await tg("sendMessage", token, { chat_id: chatId, text }); }
 
 async function ai(env, path, init = {}) {
-  return fetch(`https://api.openai.com/v1/${path}`, {
+  const res = await fetch(`https://api.openai.com/v1/${path}`, {
     method: init.method || (init.body ? "POST" : "GET"),
-    headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
+    headers: {
+      authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "content-type": "application/json",
+      "OpenAI-Beta": "assistants=v2",
+    },
     body: init.body ? JSON.stringify(init.body) : undefined,
   });
+  if (!res.ok) {
+    // короткий лог, чтобы видеть причину в Cloudflare Logs
+    const txt = await res.text().catch(() => "");
+    console.error("OpenAI API error", res.status, txt?.slice(0, 500));
+  }
+  return res;
 }
 
 async function getThreadId(kv, chatId) { return kv.get(`thread:${chatId}`); }
