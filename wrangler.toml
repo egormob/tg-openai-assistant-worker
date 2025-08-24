@@ -1,7 +1,9 @@
-name = "tg-openai-assistant-worker"
-main = "src/worker.ts"
-compatibility_date = "2024-05-13"
+name = "tg-assistant-worker"
+main = "worker.js"
+compatibility_date = "2025-08-24"
 
+# Привязка существующего KV (production)
+# ВСТАВИТЬ реальный Namespace ID (даст владелец репо перед merge)
 [[kv_namespaces]]
-binding = "THREADS"
-id = ""
+binding = "KV"
+id = "<KV_NAMESPACE_ID>"
