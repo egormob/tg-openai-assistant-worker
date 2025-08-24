@@ -1,4 +1,10 @@
-// Telegram ↔ OpenAI Assistants on Cloudflare Workers (single-file)
+/**
+ * Telegram ↔ OpenAI Assistants on Cloudflare Workers (single-file)
+ * Требования окружения:
+ * - KV binding:      KV
+ * - Secrets:         OPENAI_API_KEY, TELEGRAM_TOKEN, ASSISTANT_ID, WEBHOOK_SECRET
+ * Маршрут вебхука:   /webhook/:secret
+ */
 async function tg(method, token, payload) {
   return fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
@@ -25,6 +31,7 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     const p = url.pathname.split("/").filter(Boolean);
+    // точка входа: /webhook/:secret
     if (p[0] !== "webhook" || p[1] !== env.WEBHOOK_SECRET) return new Response("Not found", { status: 404 });
     if (req.method !== "POST") return new Response("OK");
 
@@ -38,6 +45,7 @@ export default {
     const text = msg?.text ?? msg?.caption;
     if (!text) { await sendText(env.TELEGRAM_TOKEN, chatId, "Понимаю только текст. Пришлите сообщение текстом 🙌"); return new Response("OK"); }
 
+    // история: chat_id → thread_id (KV)
     let threadId = await getThreadId(env.KV, chatId);
     if (!threadId) {
       const tRes = await ai(env, "threads", { body: {} });
@@ -46,19 +54,27 @@ export default {
       await setThreadId(env.KV, chatId, threadId);
     }
 
+    // сообщение пользователя
     await ai(env, `threads/${threadId}/messages`, { body: { role: "user", content: text } });
+
+    // запуск ассистента
     const runRes = await ai(env, `threads/${threadId}/runs`, { body: { assistant_id: env.ASSISTANT_ID } });
     const run = await runRes.json();
     if (!run?.id) { await sendText(env.TELEGRAM_TOKEN, chatId, "Ошибка запуска ассистента. Попробуйте ещё раз."); return new Response("OK"); }
 
+    // ожидание завершения + продление "typing"
     for (let i=0;i<45;i++){
       const st = await (await ai(env, `threads/${threadId}/runs/${run.id}`)).json();
       if (st.status === "completed") break;
-      if (["failed","cancelled","expired"].includes(st.status)) { await sendText(env.TELEGRAM_TOKEN, chatId, "Упс, не смог ответить. Попробуйте ещё раз."); return new Response("OK"); }
+      if (["failed","cancelled","expired"].includes(st.status)) {
+        await sendText(env.TELEGRAM_TOKEN, chatId, "Упс, не смог ответить. Попробуйте ещё раз.");
+        return new Response("OK");
+      }
       if (i%5===0) await typing(env.TELEGRAM_TOKEN, chatId);
       await sleep(1000);
     }
 
+    // ответ ассистента
     const mJson = await (await ai(env, `threads/${threadId}/messages?order=desc&limit=10`)).json();
     const assistantMsg = (mJson.data||[]).find(m=>m.role==="assistant");
     let out = "…";
