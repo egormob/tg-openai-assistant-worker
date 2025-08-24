@@ -6,4 +6,4 @@ compatibility_date = "2025-08-24"
 # ВСТАВИТЬ реальный Namespace ID (даст владелец репо перед merge)
 [[kv_namespaces]]
 binding = "KV"
-id = "<KV_NAMESPACE_ID>"
+id = "31abe783382f4a17883cb17ea713cdc2"
